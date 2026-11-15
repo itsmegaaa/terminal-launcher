@@ -85,7 +85,7 @@ object BridgeCommandBuilder {
 object ExecutionIdManager {
     private val counter = AtomicInteger(1000)
     private val activeContexts = ConcurrentHashMap<Int, ExecutionContext>()
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     fun nextRequestCode(): Int = counter.incrementAndGet()
 
