@@ -26,18 +26,26 @@
   ```
 - **Sinkronisasi Package Real-time:**  
   Menggunakan `LauncherApps.registerCallback(callback)` untuk mendeteksi instalasi, pembaruan, dan uninstal aplikasi secara instan tanpa perlu memuat ulang launcher.
+- **Handling Tombol Home & Fokus IME (`launchMode="singleTask"`):**  
+  Aplikasi launcher dikonfigurasi dengan `launchMode="singleTask"`. Saat user menekan tombol Home (baik dari aplikasi lain maupun saat di homescreen), siklus memanggil `onNewIntent()`:
+  - Reset state `AwaitingSelection` kembali ke `Normal`.
+  - Bersihkan teks input parsial jika diminta, atau pertahankan buffer.
+  - Tampilkan keyboard secara otomatis menggunakan `WindowInsetsControllerCompat(window, view).show(WindowInsetsCompat.Type.ime())`.
 
 ### 1.2 Hierarki App Matcher & State Pemilihan Ambigu
+Pencocokan dievaluasi secara **short-circuit per tier** (jika ditemukan kandidat pada Tingkat 1, evaluasi Tingkat 2 & 3 tidak dijalankan):
 1. **Tingkat 1 — Exact & Prefix Match:**
-   - Contoh: `wa` -> `WhatsApp`, `sett` -> `Settings`.
+   - Skor dihitung berbasis rasio panjang query: $\text{score} = \frac{\text{len}(\text{query})}{\text{len}(\text{appName})}$.
+   - Contoh: `wa` -> `WhatsApp` ($\text{score} = 2/8 = 0.25$), `sett` -> `Settings` ($\text{score} = 4/8 = 0.50$).
 2. **Tingkat 2 — Inisial & Subsequence Match:**
+   - Skor dihitung dari densitas kecocokan inisial kata: $\text{score} = \frac{\text{matchedInitials}}{\text{totalWords}}$.
    - Contoh: `yt` -> `YouTube`, `ml` -> `Mobile Legends`.
 3. **Tingkat 3 — Fuzzy Levenshtein Similarity:**
    - Dihitung menggunakan formula rasio:
      $$\text{ratio} = 1.0 - \left(\frac{\text{levenshteinDistance}}{\max(\text{len1}, \text{len2})}\right)$$
      Batas minimum (threshold): `ratio >= 0.75`.
 4. **Aturan Evaluasi Ambigu & State Machine (`AwaitingSelection`):**
-   - Ambiguitas terjadi jika selisih skor kandidat teratas dan kandidat kedua **kurang dari 0.10** ($\Delta \text{score} < 0.10$).
+   - Ambiguitas terjadi **di dalam tier yang sama** jika selisih skor kandidat teratas dan kandidat kedua **kurang dari 0.10** ($\Delta \text{score} < 0.10$).
    - **Most Recently Used (MRU) Priority:** Jika input ambigu pernah dipilih sebelumnya (contoh: user pernah memilih `WhatsApp` saat mengetik `wa`), buka langsung app riwayat tersebut.
    - **Force Ambiguous List via Suffix `?`:** Menambahkan tanda tanya di akhir (contoh: `wa?`) memaksa sistem menampilkan daftar pilihan dan mengabaikan MRU.
    - **Manajemen & Pembersihan MRU:**
@@ -48,7 +56,7 @@
      - Input angka valid (`1` atau `2`) membuka aplikasi dan mengembalikan state ke `Normal`.
      - State otomatis **kedaluwarsa (kembali ke `Normal`)** jika:
        - User menekan tombol Back atau mengetik perintah baru non-angka.
-       - Homescreen mengalami pause / berpindah aplikasi.
+       - Homescreen mengalami pause / berpindah aplikasi atau trigger `onNewIntent()`.
        - Timeout pasif 15 detik tanpa input.
 
 ---
@@ -102,12 +110,13 @@
 
 ### 3.1 IPC Production Settings & Override Timeout
 - `RUN_COMMAND_PATH`: `/data/data/com.termux/files/usr/bin/timeout`
+- `RUN_COMMAND_BACKGROUND`: `true` (boolean extra wajib agar proses berjalan senyap di background tanpa pop-up terminal).
 - Default timeout: **30 detik** (`-k 2`).
 - **Override Timeout Per-Command:**  
   User dapat menentukan batas waktu kustom untuk perintah panjang (seperti `pkg install` atau `git clone`) via sintaks `$t<detik> <cmd>` (contoh: `$t120 pkg update`).
-  - **Urutan Parsing:** Parser memeriksa regex `^\$t(\d+)\s` terlebih dahulu sebelum memproses prefix umum `^\$`.
+  - **Urutan Parsing & Strict Regex:** Parser memeriksa regex `^\$\s*t(\d+)\s+(.+)$` terlebih dahulu sebelum memproses prefix umum `^\$`. Pola ini mewajibkan angka persis setelah `t` dan dipisahkan whitespace dengan command.
   - **Validasi Rentang:** Batas waktu valid adalah `1` hingga `600` detik (maksimal 10 menit).
-  - **Anti-Bentrok:** Perintah seperti `$tar -xf file.tar` diakui sebagai shell command `tar`, bukan override timeout. Input seperti `$t0` atau `$t` tanpa angka ditolak dengan validasi error.
+  - **Anti-Bentrok Perintah Huruf 't':** Perintah shell seperti `$top`, `$tar -xf file.tar`, atau `$touch test.txt` dijamin aman dan diakui sebagai shell command murni, bukan override timeout. Input seperti `$t0` atau `$t` tanpa angka/argumen ditolak dengan validasi error.
 - `RUN_COMMAND_ARGUMENTS`: `["-k", "2", "<timeout_seconds>", "/data/data/com.termux/files/usr/bin/bash", "-c", cmd]`
 - Watchdog UI: `Termux timeout + 5 detik margin`.
 

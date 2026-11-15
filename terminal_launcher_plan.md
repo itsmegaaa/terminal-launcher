@@ -17,6 +17,15 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
 > [!IMPORTANT]
 > **Karakteristik & Batasan Termux RUN_COMMAND Bridge:**
 > - **One-Shot Only (Non-Interaktif, Tanpa TTY):** Background command via Intent tidak memiliki `stdin`. Perintah interaktif (`vim`, `nano`, `python` REPL, `ssh`, prompt `y/n`) **tidak didukung**. Jika butuh interaksi, user diarahkan membuka sesi Termux foreground.
+> - **Eksekusi Background Murni (`RUN_COMMAND_BACKGROUND = true`):**  
+>   Secara bawaan, Termux akan memunculkan jendela terminal foreground saat menerima intent. Aplikasi wajib menyertakan boolean extra:  
+>   `intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)`  
+>   agar eksekusi berjalan 100% senyap di background tanpa menginterupsi layar launcher.
+> - **Format Bundle Hasil (Nested Result Bundle):**  
+>   Termux membungkus hasil eksekusi di dalam nested Bundle dengan key `com.termux.execute.result` (atau `PluginResults.EXTRA_PLUGIN_RESULT_BUNDLE`). Ekstraksi `stdout`, `stderr`, dan `exitCode` dilakukan dari sub-bundle tersebut.  
+>   *Catatan:* `termux-shared` secara internal memotong string output di kisaran ~100KB sebelum membalas ke PendingIntent untuk mencegah `TransactionTooLargeException`.
+> - **Karakteristik Shell Non-Login & Non-Interactive (`bash -c`):**  
+>   Perintah dieksekusi tanpa sourcing otomatis `~/.bashrc` atau `~/.profile`. Skenario `$PATH` diuji di Spike untuk mengevaluasi apakah dibutuhkan file environment ringan khusus launcher (hindari `bash -lc` agar banner/skrip berat tidak merusak target latensi warm < 1000ms).
 > - **Quoting Aman via Array Argumen (Bukan Anti-Injection):**  
 >   Perintah shell user sengaja diinterpretasikan penuh oleh bash (pipe `|`, `&&`, `$VAR`, backticks tetap berfungsi).  
 >   Perintah **DILARANG** disambung sebagai string mentah ke wrapper. Perintah diteruskan apa adanya tanpa filtering/escaping sebagai **satu elemen array mandiri** melalui extras Termux resmi:
@@ -104,6 +113,9 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
 16. **(Opsional) Surviving Background Process (Daemon Test):**  
     - Command: `nohup sleep 120 >/dev/null 2>&1 &`  
     - Ekspektasi: Cek melalui command kedua `ps -ef | grep sleep` apakah proses tetap hidup setelah bash selesai dan wrapper kembali, atau ikut dibunuh Termux/Android. Ini menjawab apakah launcher mampu menyalakan bot/server atau murni runner command pendek.
+17. **(Observasi) Shell Environment & $PATH Coverage:**  
+    - Command: `echo "$PATH"`  
+    - Ekspektasi: Catat nilai `$PATH` default pada non-login `bash -c`. Verifikasi apakah tool di luar `/usr/bin` (seperti `~/.local/bin`, `~/go/bin`) dapat diakses tanpa profile file, dan evaluasi opsi `BASH_ENV` ringan jika diperlukan.
 
 ---
 
