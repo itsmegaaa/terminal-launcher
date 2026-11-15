@@ -4,6 +4,11 @@
     <!-- Izin eksekusi perintah background Termux -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
+    <!-- Android 11+ Package Visibility wajib untuk mengakses Termux -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:label="Termux Spike"

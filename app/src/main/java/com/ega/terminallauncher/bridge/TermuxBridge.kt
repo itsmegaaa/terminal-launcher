@@ -236,7 +236,37 @@ class TermuxBridge(private val context: Context) {
             putExtra(TermuxBridgeConstants.EXTRA_PENDING_INTENT, pendingIntent)
         }
 
-        context.startService(intent)
+        try {
+            val component = context.startService(intent)
+            if (component == null) {
+                ExecutionIdManager.dispatchResult(
+                    requestCode,
+                    Bundle().apply {
+                        putString("stderr", "[IPC Error: startService returned null. Termux mungkin belum di-setup atau tidak terpasang]")
+                        putInt("exitCode", -1)
+                        putString("errmsg", "startService returned null")
+                    }
+                )
+            }
+        } catch (e: SecurityException) {
+            ExecutionIdManager.dispatchResult(
+                requestCode,
+                Bundle().apply {
+                    putString("stderr", "[SecurityException]: ${e.message}\n-> Pastikan izin com.termux.permission.RUN_COMMAND aktif di Pengaturan HP > Aplikasi > Termux Spike > Izin > Izin Tambahan.")
+                    putInt("exitCode", -1)
+                    putString("errmsg", e.message ?: "SecurityException")
+                }
+            )
+        } catch (e: Exception) {
+            ExecutionIdManager.dispatchResult(
+                requestCode,
+                Bundle().apply {
+                    putString("stderr", "[Exception ${e.javaClass.simpleName}]: ${e.message}")
+                    putInt("exitCode", -1)
+                    putString("errmsg", e.message ?: "Exception")
+                }
+            )
+        }
         return requestCode
     }
 }

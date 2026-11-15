@@ -26,6 +26,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            android.util.Log.e("TermuxSpike", "FATAL CRASH", throwable)
+        }
+
         bridge = TermuxBridge(this)
 
         setContent {
