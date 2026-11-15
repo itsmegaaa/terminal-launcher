@@ -21,9 +21,9 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
 >   Secara bawaan, Termux akan memunculkan jendela terminal foreground saat menerima intent. Aplikasi wajib menyertakan boolean extra:  
 >   `intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)`  
 >   agar eksekusi berjalan 100% senyap di background tanpa menginterupsi layar launcher.
-> - **Format Bundle Hasil (Nested Result Bundle):**  
->   Termux membungkus hasil eksekusi di dalam nested Bundle dengan key `com.termux.execute.result` (atau `PluginResults.EXTRA_PLUGIN_RESULT_BUNDLE`). Ekstraksi `stdout`, `stderr`, dan `exitCode` dilakukan dari sub-bundle tersebut.  
->   *Catatan:* `termux-shared` secara internal memotong string output di kisaran ~100KB sebelum membalas ke PendingIntent untuk mencegah `TransactionTooLargeException`.
+> - **Format Bundle Hasil (Resolusi Dinamis & Internal Truncation):**  
+>   Key bundle hasil dari Termux tidak di-hardcode kaku, melainkan diinspeksi secara dinamis dengan fallback bertingkat: root extras, `com.termux.app.extra.TERMUX_SERVICE.EXTRA_PLUGIN_RESULT_BUNDLE`, `"result"`, atau sub-bundle apa pun yang memuat `stdout`/`exitCode`. Semua keys yang diterima dicatat pada Test 1.  
+>   *Internal Truncation & Sinyal Error:* `termux-shared` memotong output ~100KB gabungan sebelum dikirim dan menyertakan extras `stdout_original_length` / `stderr_original_length`. Sinyal error internal diekstrak via `err` dan `errmsg`.
 > - **Karakteristik Shell Non-Login & Non-Interactive (`bash -c`):**  
 >   Perintah dieksekusi tanpa sourcing otomatis `~/.bashrc` atau `~/.profile`. Skenario `$PATH` diuji di Spike untuk mengevaluasi apakah dibutuhkan file environment ringan khusus launcher (hindari `bash -lc` agar banner/skrip berat tidak merusak target latensi warm < 1000ms).
 > - **Quoting Aman via Array Argumen (Bukan Anti-Injection):**  
@@ -68,7 +68,7 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
 ### Matriks Uji Runtime:
 1. **Normal Execution:**  
    - Command: `echo 'bridge-ok'`  
-   - Ekspektasi: `stdout.trimEnd() == "bridge-ok"`, `exitCode = 0`.
+   - Ekspektasi: `stdout.trimEnd() == "bridge-ok"`, `exitCode = 0`. Catat seluruh key bundle yang diterima untuk memverifikasi struktur payload Termux.
 2. **Quoting & Shell Syntax Integrity:**  
    - Command: `echo "a'b $HOME \n c"`  
    - Ekspektasi Runtime: `$HOME` diekspansi dan `\n` literal:  
@@ -90,20 +90,20 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
    - Ekspektasi: Ukur minimal **20 kali pengujian berturut-turut**, hitung nilai **median** dan **worst-case** (ms) dari intent dikirim sampai bundle diterima. Uji pada dua kondisi: **warm** (proses Termux sudah aktif di background) vs **cold** (Termux baru di-force-stop).
 8. **Output Cap Observation (~200KB):**  
    - Command: `head -c 200000 /dev/zero | tr '\0' a`  
-   - Ekspektasi: Catat perilaku aktual (terpotong, bundle null, atau exception).
+   - Ekspektasi: Amati pemotongan bawaan Termux via `stdout_original_length` (~100KB) dan catat bagian mana yang dipertahankan (kepala vs ekor).
 9. **Cold Start & Inactive Process:**  
    - **9a. Fresh Install:** *(Uji hanya di emulator/device lain)*. Catat sinyal bootstrap belum siap.  
    - **9b. Inactive Process:** *Cara Reproduksi:* Force stop Termux via Info Aplikasi Android. Kirim intent `echo hi`. Ekspektasi: Service bangun dan berhasil eksekusi.
 10. **`allow-external-apps=false` Observation:**  
     - *Cara Reproduksi:* Ubah `allow-external-apps=false` di `~/.termux/termux.properties`, jalankan `termux-reload-settings`.  
-    - Ekspektasi: Catat sinyal kegagalan yang diterima app (SecurityException vs bundle null). Kembalikan ke `true` setelah tes.
+    - Ekspektasi: Catat sinyal kegagalan yang diterima app (SecurityException, bundle null, atau field `err`/`errmsg`). Kembalikan ke `true` setelah tes.
 11. **Negative Control (FLAG_IMMUTABLE):**  
     - Ekspektasi: PendingIntent disetel `FLAG_IMMUTABLE`. Konfirmasi bundle kembali `null`.
 12. **Explicit Intent Verification (Android 14):**  
     - Ekspektasi: PendingIntent eksplisit berjalan mulus di Android 14 (`targetSdk 34`) tanpa SecurityException.
 13. **Permission RUN_COMMAND Not Granted:**  
     - *Cara Reproduksi:* Cabut izin RUN_COMMAND dari app spike via Pengaturan Android. Kirim intent.  
-    - Ekspektasi: Catat error/sinyal OS dan catat jalur menu persis untuk mengaktifkannya di perangkat.
+    - Ekspektasi: Catat sinyal OS / internal Termux (`err`, `errmsg`) dan catat jalur menu persis untuk mengaktifkannya di perangkat.
 14. **Rapid Back-to-Back Execution (Collision Test):**  
     - Command berturut-turut: Kirim `echo "first"` lalu 10ms kemudian `echo "second"`.  
     - Ekspektasi: Kedua hasil kembali utuh ke execution context masing-masing tanpa tertukar atau menimpa satu sama lain.
@@ -126,7 +126,7 @@ Membuktikan secara empiris kelayakan komunikasi IPC dua arah antara aplikasi And
 2. Pengujian nomor 9b (Termux inactive bangun normal) dan nomor 12 (Intent eksplisit di Android 14) dinyatakan **PASS**.
 3. Pengujian nomor 14 (Rapid back-to-back collision test) dinyatakan **PASS**.
 4. Median latensi warm `echo hi` (dari 20 sampel) berada di bawah **1000ms (1 detik)**. Jika di atas 1 detik, diskusikan kelayakan UX sebelum lanjut.
-5. Perilaku Test 8 (Output cap) memiliki mitigasi konkret yang aman array argumen dan menjaga exit code, misal pola parameter posisi: `["-k", "2", "<duration>", bash, "-c", 'bash -c "$1" | head -c 80000; exit ${PIPESTATUS[0]}', "_", cmd]`. (Uji juga perilaku jika stderr yang berukuran besar).
+5. Pemotongan output besar (Test 8) terdeteksi secara andal via `*_ORIGINAL_LENGTH` dan UI menampilkan status `[output truncated]`. (Pola `| head -c 80000` via parameter posisi disiapkan sebagai fallback jika Termux versi lama tidak memotong internal).
 
 ### Kriteria NO-GO & Batas Investigasi:
 - Jika investigasi bundle `null` atau IPC ditolak sistem berlangsung hingga **3 jam tanpa progres**, hentikan pengerjaan spike.

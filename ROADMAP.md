@@ -35,21 +35,21 @@
 ### 1.2 Hierarki App Matcher & State Pemilihan Ambigu
 Pencocokan dievaluasi secara **short-circuit per tier** (jika ditemukan kandidat pada Tingkat 1, evaluasi Tingkat 2 & 3 tidak dijalankan):
 1. **Tingkat 1 — Exact & Prefix Match:**
-   - Skor dihitung berbasis rasio panjang query: $\text{score} = \frac{\text{len}(\text{query})}{\text{len}(\text{appName})}$.
-   - Contoh: `wa` -> `WhatsApp` ($\text{score} = 2/8 = 0.25$), `sett` -> `Settings` ($\text{score} = 4/8 = 0.50$).
+   - **Aturan Ambiguitas Prefix:** Jika terdapat $\ge 2$ kandidat prefix dan tidak ada kandidat yang persis sama dengan nama lengkap (exact match), kondisi ini **langsung dinyatakan ambigu**.
+   - Skor rasio panjang query ($\text{score} = \frac{\text{len}(\text{query})}{\text{len}(\text{appName})}$) digunakan murni untuk **mengurutkan (ranking)** urutan kandidat di daftar pilihan, bukan untuk membatalkan status ambigu.
+   - Contoh: query `wa` cocok dengan `WhatsApp` ($\text{score} = 2/8 = 0.25$) dan `WhatsApp Business` ($\text{score} = 2/17 \approx 0.12$). Keduanya otomatis masuk ke daftar pilihan: `[1] WhatsApp  [2] WhatsApp Business`.
 2. **Tingkat 2 — Inisial & Subsequence Match:**
    - Skor dihitung dari densitas kecocokan inisial kata: $\text{score} = \frac{\text{matchedInitials}}{\text{totalWords}}$.
-   - Contoh: `yt` -> `YouTube`, `ml` -> `Mobile Legends`.
+   - Contoh: `yt` -> `YouTube`, `ml` -> `Mobile Legends`. Jika terdapat $\ge 2$ kandidat dengan $\Delta \text{score} < 0.10$, tampilkan daftar ambigu.
 3. **Tingkat 3 — Fuzzy Levenshtein Similarity:**
    - Dihitung menggunakan formula rasio:
      $$\text{ratio} = 1.0 - \left(\frac{\text{levenshteinDistance}}{\max(\text{len1}, \text{len2})}\right)$$
-     Batas minimum (threshold): `ratio >= 0.75`.
+     Batas minimum (threshold): `ratio >= 0.75`. Jika terdapat $\ge 2$ kandidat dengan $\Delta \text{score} < 0.10$, tampilkan daftar ambigu.
 4. **Aturan Evaluasi Ambigu & State Machine (`AwaitingSelection`):**
-   - Ambiguitas terjadi **di dalam tier yang sama** jika selisih skor kandidat teratas dan kandidat kedua **kurang dari 0.10** ($\Delta \text{score} < 0.10$).
    - **Most Recently Used (MRU) Priority:** Jika input ambigu pernah dipilih sebelumnya (contoh: user pernah memilih `WhatsApp` saat mengetik `wa`), buka langsung app riwayat tersebut.
    - **Force Ambiguous List via Suffix `?`:** Menambahkan tanda tanya di akhir (contoh: `wa?`) memaksa sistem menampilkan daftar pilihan dan mengabaikan MRU.
    - **Manajemen & Pembersihan MRU:**
-     - Perintah `reset mru` (atau `unalias mru <token>`) mereset preferensi riwayat.
+     - Perintah `reset mru` mereset seluruh preferensi riwayat ambigu.
      - Jika sebuah aplikasi di-uninstall, seluruh entri MRU yang mengarah ke package tersebut otomatis dibersihkan via `LauncherApps.Callback`.
    - **Siklus Hidup & Expiration State `AwaitingSelection`:**
      - State aktif saat daftar pilihan angka muncul: `[1] WhatsApp  [2] WhatsApp Business`.
@@ -76,7 +76,7 @@ Pencocokan dievaluasi secara **short-circuit per tier** (jika ditemukan kandidat
    - **Arah 2:** Tolak pembuatan `alias b=wa` jika nama `b` sudah terdaftar sebagai target dalam alias yang ada sebelumnya (`a=b`).
    - Penolakan disertai error: `[Error: Nested alias tidak didukung]`.
 4. **Pengecekan Reserved Words:**
-   - Token pertama hasil ekspansi dicocokkan dengan daftar reserved words.
+   - Token pertama hasil ekspansi dicocokkan dengan daftar reserved words resmi: `apps`, `list`, `open`, `battery`, `bat`, `calc`, `alias`, `unalias`, `clear`, `cls`, `help`, `reset`.
 5. **Shell Prefix Check (`$`):**
    - Mendukung format `$cmd` maupun `$ cmd` (spasi opsional).
 
@@ -93,6 +93,7 @@ Pencocokan dievaluasi secara **short-circuit per tier** (jika ditemukan kandidat
   - Penanganan pembagian dengan nol mengembalikan output aman: `[Error: Division by zero]`.
 - `alias <key>=<val>`: Menyimpan alias kustom baru.
 - `unalias <key>`: Menghapus alias kustom.
+- `reset mru`: Mereset seluruh preferensi riwayat aplikasi ambigu.
 - `clear` / `cls`: Membersihkan layar riwayat, namun banner ASCII "ega" dan pemisah diamond tetap dipertahankan.
 - `help`: Menampilkan ringkasan sintaks dan daftar perintah yang didukung.
 
@@ -116,7 +117,7 @@ Pencocokan dievaluasi secara **short-circuit per tier** (jika ditemukan kandidat
   User dapat menentukan batas waktu kustom untuk perintah panjang (seperti `pkg install` atau `git clone`) via sintaks `$t<detik> <cmd>` (contoh: `$t120 pkg update`).
   - **Urutan Parsing & Strict Regex:** Parser memeriksa regex `^\$\s*t(\d+)\s+(.+)$` terlebih dahulu sebelum memproses prefix umum `^\$`. Pola ini mewajibkan angka persis setelah `t` dan dipisahkan whitespace dengan command.
   - **Validasi Rentang:** Batas waktu valid adalah `1` hingga `600` detik (maksimal 10 menit).
-  - **Anti-Bentrok Perintah Huruf 't':** Perintah shell seperti `$top`, `$tar -xf file.tar`, atau `$touch test.txt` dijamin aman dan diakui sebagai shell command murni, bukan override timeout. Input seperti `$t0` atau `$t` tanpa angka/argumen ditolak dengan validasi error.
+  - **Anti-Bentrok & Fall-through Perintah Huruf 't':** Perintah shell seperti `$top`, `$tar -xf file.tar`, `$touch test.txt`, atau input `$t` (tanpa angka) tidak cocok dengan regex override, sehingga otomatis jatuh dan dieksekusi sebagai shell command biasa. Input yang cocok dengan format override tetapi nilainya di luar rentang (seperti `$t0 <cmd>` atau `$t9999 <cmd>`) ditolak dengan pesan validasi error.
 - `RUN_COMMAND_ARGUMENTS`: `["-k", "2", "<timeout_seconds>", "/data/data/com.termux/files/usr/bin/bash", "-c", cmd]`
 - Watchdog UI: `Termux timeout + 5 detik margin`.
 

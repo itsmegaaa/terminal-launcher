@@ -35,6 +35,10 @@ data class TermuxExecutionResult(
     val exitCode: Int,
     val errCode: Int,
     val errmsg: String,
+    val stdoutOriginalLength: Int? = null,
+    val stderrOriginalLength: Int? = null,
+    val isTruncated: Boolean = false,
+    val rawKeys: List<String> = emptyList(),
     val durationMs: Long,
     val uiMessage: String
 )
@@ -131,15 +135,24 @@ object ExecutionIdManager {
         mainHandler.removeCallbacks(context.watchdogRunnable)
 
         val durationMs = System.currentTimeMillis() - context.startTimeMs
-        val resultBundle = rawBundle?.getBundle(TermuxBridgeConstants.RESULT_BUNDLE_KEY) ?: rawBundle
+        val rawKeys = rawBundle?.keySet()?.toList() ?: emptyList()
+
+        // Inspect and resolve result bundle dynamically (fallback: EXTRA_PLUGIN_RESULT_BUNDLE, result, or root)
+        val resultBundle = resolveResultBundle(rawBundle)
 
         val stdout = resultBundle?.getString("stdout") ?: ""
         val stderr = resultBundle?.getString("stderr") ?: ""
         val exitCode = resultBundle?.getInt("exitCode", -1) ?: -1
-        val errCode = resultBundle?.getInt("errCode", 0) ?: 0
+        val errCode = resultBundle?.getInt("errCode", 0) ?: resultBundle?.getInt("err", 0) ?: 0
         val errmsg = resultBundle?.getString("errmsg") ?: ""
+        val stdoutOrigLen = if (resultBundle?.containsKey("stdout_original_length") == true) resultBundle.getInt("stdout_original_length") else null
+        val stderrOrigLen = if (resultBundle?.containsKey("stderr_original_length") == true) resultBundle.getInt("stderr_original_length") else null
 
-        val uiMessage = ExitCodeMapper.mapExitCode(exitCode, durationMs, context.timeoutSec)
+        val isTruncated = (stdoutOrigLen != null && stdoutOrigLen > stdout.length) ||
+                          (stderrOrigLen != null && stderrOrigLen > stderr.length)
+
+        val baseMsg = ExitCodeMapper.mapExitCode(exitCode, durationMs, context.timeoutSec)
+        val uiMessage = if (isTruncated) "$baseMsg [output truncated]" else baseMsg
 
         val result = TermuxExecutionResult(
             requestCode = requestCode,
@@ -148,12 +161,42 @@ object ExecutionIdManager {
             exitCode = exitCode,
             errCode = errCode,
             errmsg = errmsg,
+            stdoutOriginalLength = stdoutOrigLen,
+            stderrOriginalLength = stderrOrigLen,
+            isTruncated = isTruncated,
+            rawKeys = rawKeys,
             durationMs = durationMs,
             uiMessage = uiMessage
         )
 
         context.callback(result)
         return true
+    }
+
+    private fun resolveResultBundle(rawBundle: Bundle?): Bundle? {
+        if (rawBundle == null) return null
+        // 1. Direct root bundle check
+        if (rawBundle.containsKey("stdout") || rawBundle.containsKey("exitCode")) return rawBundle
+
+        // 2. Standard candidate keys
+        val candidateKeys = listOf(
+            "com.termux.app.extra.TERMUX_SERVICE.EXTRA_PLUGIN_RESULT_BUNDLE",
+            "com.termux.execute.result",
+            "result"
+        )
+        for (key in candidateKeys) {
+            val b = rawBundle.getBundle(key)
+            if (b != null) return b
+        }
+
+        // 3. Any nested bundle that contains stdout or exitCode
+        for (key in rawBundle.keySet()) {
+            val b = rawBundle.getBundle(key)
+            if (b != null && (b.containsKey("stdout") || b.containsKey("exitCode"))) {
+                return b
+            }
+        }
+        return rawBundle
     }
 
     fun activeCount(): Int = activeContexts.size

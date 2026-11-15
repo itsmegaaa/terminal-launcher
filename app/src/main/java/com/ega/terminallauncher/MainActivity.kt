@@ -82,8 +82,10 @@ fun SpikeScreen(bridge: TermuxBridge) {
                         bridge.execute(customCommand) { res ->
                             isRunning = false
                             appendLog("Result ID: ${res.requestCode} | Exit: ${res.exitCode} | ${res.durationMs}ms")
+                            if (res.rawKeys.isNotEmpty()) appendLog("Keys: ${res.rawKeys.joinToString()}")
                             if (res.stdout.isNotBlank()) appendLog("STDOUT: ${res.stdout.trimEnd()}")
                             if (res.stderr.isNotBlank()) appendLog("STDERR: ${res.stderr.trimEnd()}")
+                            if (res.errmsg.isNotBlank()) appendLog("ERRMSG: ${res.errmsg}")
                             appendLog("UI: ${res.uiMessage}\n---")
                         }
                     }
@@ -106,7 +108,7 @@ fun SpikeScreen(bridge: TermuxBridge) {
                     appendLog("\n[TEST 1] Normal echo...")
                     bridge.execute("echo 'bridge-ok'") { res ->
                         val pass = res.stdout.trimEnd() == "bridge-ok" && res.exitCode == 0
-                        appendLog("TEST 1: ${if (pass) "PASS" else "FAIL"} (${res.durationMs}ms) | stdout='${res.stdout.trimEnd()}'")
+                        appendLog("TEST 1: ${if (pass) "PASS" else "FAIL"} (${res.durationMs}ms) | stdout='${res.stdout.trimEnd()}' | Keys: ${res.rawKeys}")
                     }
                 },
                 modifier = Modifier.weight(1f),
