@@ -140,7 +140,7 @@ fun TerminalScreen(
     var logs by remember {
         mutableStateOf(
             listOf(
-                "Ash Launcher v0.4.0 [Ready]",
+                "Ash Launcher v0.4.1 [Ready]",
                 "Type app name, built-in command, or '$ <cmd>'."
             )
         )

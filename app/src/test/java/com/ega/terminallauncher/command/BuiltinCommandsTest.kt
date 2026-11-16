@@ -151,7 +151,7 @@ class BuiltinCommandsTest {
         val r = exec("help")
         assertTrue(r is CommandAction.Message)
         val text = (r as CommandAction.Message).text
-        assertTrue(text.contains("Ash Launcher v0.4.0 — Help"))
+        assertTrue(text.contains("Ash Launcher v0.4.1 — Help"))
         assertTrue(text.contains("Built-in Commands:"))
         assertTrue(text.contains("Shell Commands (Termux IPC):"))
     }

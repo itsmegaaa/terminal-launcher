@@ -1,11 +1,16 @@
 package com.ega.terminallauncher.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -39,42 +45,53 @@ fun PromptFooter(
             .fillMaxWidth()
             .padding(top = 4.dp)
     ) {
-        // Line 1: Powerline folder tag [\uF07C ~][\uE0B0]
+        // Line 1: Powerline folder tag [~]▶ rendered via native vector Path (no broken PUA font glyphs)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 2.dp)
+            modifier = Modifier
+                .height(IntrinsicSize.Min)
+                .padding(bottom = 2.dp)
         ) {
             Box(
                 modifier = Modifier
+                    .fillMaxHeight()
                     .background(
                         color = palette.primary,
                         shape = RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp)
                     )
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "\uF07C ~",
+                    text = "~",
                     color = palette.background,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Text(
-                text = "\uE0B0",
-                color = palette.primary,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp
-            )
+            Canvas(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(8.dp)
+            ) {
+                val path = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, size.height / 2f)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(path, color = palette.primary)
+            }
         }
 
-        // Line 2: \u276F [input_cursor]
+        // Line 2: ❯ [input_cursor]
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "\u276F ",
+                text = "❯ ",
                 color = palette.primary,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 15.sp,

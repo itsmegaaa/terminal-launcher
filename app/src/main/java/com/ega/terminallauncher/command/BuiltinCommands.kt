@@ -132,7 +132,7 @@ class BuiltinCommands(
 
             "help" -> {
                 val helpText = """
-                Ash Launcher v0.4.0 — Help
+                Ash Launcher v0.4.1 — Help
                 ==========================
                 Built-in Commands:
                   help                Show this help table
