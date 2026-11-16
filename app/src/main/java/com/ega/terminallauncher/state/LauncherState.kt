@@ -1,7 +1,11 @@
 package com.ega.terminallauncher.state
 
-import com.ega.terminallauncher.matcher.AppMatcher
-import com.ega.terminallauncher.matcher.MatchResult
+import com.ega.terminallauncher.alias.AliasManager
+import com.ega.terminallauncher.alias.AliasRepository
+import com.ega.terminallauncher.alias.InMemoryAliasRepository
+import com.ega.terminallauncher.command.BuiltinCommands
+import com.ega.terminallauncher.command.CommandParser
+import com.ega.terminallauncher.command.SystemOperations
 import com.ega.terminallauncher.model.AppEntry
 import com.ega.terminallauncher.mru.MruRepository
 import kotlinx.coroutines.CoroutineScope
@@ -18,14 +22,29 @@ sealed interface CommandAction {
     data class Launch(val app: AppEntry, val source: String) : CommandAction
     data class ShowChoices(val choicesText: String) : CommandAction
     data class Message(val text: String) : CommandAction
-    object None : CommandAction
+    data class ExecuteShell(val rawCommand: String, val shellCommand: String, val timeoutSec: Int) : CommandAction
+    data object ClearLogs : CommandAction
+    data object None : CommandAction
 }
 
 class LauncherStateMachine(
     val mruRepo: MruRepository,
+    commandParser: CommandParser? = null,
+    val aliasRepo: AliasRepository = InMemoryAliasRepository(),
     private val scope: CoroutineScope? = null,
     private val onStateChanged: ((LauncherState) -> Unit)? = null
 ) {
+    val aliasManager: AliasManager = AliasManager(aliasRepo)
+    val commandParser: CommandParser = commandParser ?: run {
+        val noopSystemOps = object : SystemOperations {
+            override fun getBatteryInfo(): String = "[Battery: 100% | Status: Full | Temp: 25.0°C]"
+            override fun toggleFlashlight(): String = "[Flashlight ON]"
+            override fun handleVolume(args: String): String = "[Volume: 10/15 (66%)]"
+        }
+        val builtin = BuiltinCommands(noopSystemOps, aliasManager, mruRepo)
+        CommandParser(builtin, aliasManager, aliasRepo, mruRepo)
+    }
+
     var state: LauncherState = LauncherState.Normal
         private set(value) {
             field = value
@@ -53,42 +72,15 @@ class LauncherStateMachine(
             }
         }
 
-        if (input.equals("reset mru", ignoreCase = true)) {
-            mruRepo.clear()
-            return CommandAction.Message("[MRU cache cleared]")
-        }
-
-        val forceList = input.endsWith("?")
-        val cleanQuery = input.removeSuffix("?").trim()
-        if (cleanQuery.isEmpty()) {
-            return CommandAction.None
-        }
-
-        val matchResult = AppMatcher.match(cleanQuery, apps)
-        return when (matchResult) {
-            is MatchResult.Exact -> {
-                CommandAction.Launch(matchResult.app, source = "exact")
-            }
-            is MatchResult.Single -> {
-                CommandAction.Launch(matchResult.app, source = "single")
-            }
-            is MatchResult.Ambiguous -> {
-                if (!forceList) {
-                    val rememberedPkg = mruRepo.get(cleanQuery)
-                    val rememberedApp = matchResult.candidates.firstOrNull { it.packageName == rememberedPkg }
-                    if (rememberedApp != null) {
-                        return CommandAction.Launch(rememberedApp, source = "mru")
-                    }
-                }
-                state = LauncherState.AwaitingSelection(cleanQuery, matchResult.candidates)
+        return commandParser.parse(
+            rawInput = input,
+            apps = apps,
+            formatChoices = ::formatChoices,
+            onAwaitingSelection = { query, candidates ->
+                state = LauncherState.AwaitingSelection(query, candidates)
                 startTimeout()
-                val formatted = formatChoices(matchResult.candidates)
-                CommandAction.ShowChoices(formatted)
             }
-            is MatchResult.NoMatch -> {
-                CommandAction.Message("No match for '$cleanQuery'")
-            }
-        }
+        )
     }
 
     fun onBack(): Boolean {

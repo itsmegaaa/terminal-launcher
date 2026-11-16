@@ -47,8 +47,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.ega.terminallauncher.alias.AliasManager
+import com.ega.terminallauncher.alias.SharedPrefsAliasRepository
 import com.ega.terminallauncher.apps.AppManager
 import com.ega.terminallauncher.bridge.TermuxBridge
+import com.ega.terminallauncher.command.AndroidSystemOperations
+import com.ega.terminallauncher.command.BuiltinCommands
+import com.ega.terminallauncher.command.CommandParser
 import com.ega.terminallauncher.mru.SharedPrefsMruRepository
 import com.ega.terminallauncher.state.CommandAction
 import com.ega.terminallauncher.state.LauncherState
@@ -77,13 +82,21 @@ class MainActivity : ComponentActivity() {
         bridge = TermuxBridge(this)
         mruRepo = SharedPrefsMruRepository(this)
         appManager = AppManager(this, mruRepo)
+        val aliasRepo = SharedPrefsAliasRepository(this)
+        val aliasManager = AliasManager(aliasRepo)
+        val systemOps = AndroidSystemOperations(this)
+        val builtinCommands = BuiltinCommands(systemOps, aliasManager, mruRepo)
+        val commandParser = CommandParser(builtinCommands, aliasManager, aliasRepo, mruRepo)
         stateMachine = LauncherStateMachine(
             mruRepo = mruRepo,
+            commandParser = commandParser,
+            aliasRepo = aliasRepo,
             scope = lifecycleScope
         )
 
         setContent {
             TerminalScreen(
+                bridge = bridge,
                 appManager = appManager,
                 stateMachine = stateMachine,
                 reFocusTrigger = reFocusTrigger.value,
@@ -112,6 +125,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun TerminalScreen(
+    bridge: TermuxBridge,
     appManager: AppManager,
     stateMachine: LauncherStateMachine,
     reFocusTrigger: Int,
@@ -121,8 +135,8 @@ fun TerminalScreen(
     var logs by remember {
         mutableStateOf(
             listOf(
-                "Ash Launcher v0.2.0 [Ready]",
-                "Type app name to launch, or 'reset mru' to clear cache."
+                "Ash Launcher v0.3.0 [Ready]",
+                "Type app name, built-in command, or '$ <cmd>'."
             )
         )
     }
@@ -157,7 +171,28 @@ fun TerminalScreen(
                 appendLog(action.choicesText)
             }
             is CommandAction.Message -> {
-                appendLog(action.text)
+                action.text.lines().forEach { appendLog(it) }
+            }
+            is CommandAction.ExecuteShell -> {
+                appendLog("[Running: $ ${action.shellCommand}...]")
+                bridge.execute(action.shellCommand, action.timeoutSec) { result ->
+                    if (result.stdout.isNotBlank()) {
+                        result.stdout.trimEnd().lines().forEach { appendLog(it) }
+                    }
+                    if (result.stderr.isNotBlank()) {
+                        result.stderr.trimEnd().lines().forEach { appendLog(it) }
+                    }
+                    val statusLine = if (result.exitCode == 0) {
+                        val trunc = if (result.isTruncated) " [output truncated]" else ""
+                        "[Exit: 0]$trunc"
+                    } else {
+                        result.uiMessage
+                    }
+                    appendLog(statusLine)
+                }
+            }
+            is CommandAction.ClearLogs -> {
+                logs = emptyList()
             }
             CommandAction.None -> {}
         }

@@ -4,6 +4,9 @@
     <!-- Izin eksekusi perintah background Termux -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
+    <!-- Fitur kamera/flash opsional untuk built-in flash command -->
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+
     <!-- Android 11+ Package Visibility wajib untuk mengakses Termux dan aplikasi terinstal -->
     <queries>
         <package android:name="com.termux" />

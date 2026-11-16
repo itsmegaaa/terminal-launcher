@@ -88,6 +88,7 @@ object ExecutionIdManager {
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     fun nextRequestCode(): Int = counter.incrementAndGet()
+    fun nextExecutionId(): Int = nextRequestCode()
 
     fun register(
         requestCode: Int,
