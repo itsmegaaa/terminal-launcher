@@ -8,6 +8,7 @@ import com.ega.terminallauncher.command.CommandParser
 import com.ega.terminallauncher.command.SystemOperations
 import com.ega.terminallauncher.model.AppEntry
 import com.ega.terminallauncher.mru.MruRepository
+import com.ega.terminallauncher.ui.theme.ThemePreset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,6 +24,7 @@ sealed interface CommandAction {
     data class ShowChoices(val choicesText: String) : CommandAction
     data class Message(val text: String) : CommandAction
     data class ExecuteShell(val rawCommand: String, val shellCommand: String, val timeoutSec: Int) : CommandAction
+    data class SetTheme(val theme: ThemePreset, val message: String) : CommandAction
     data object ClearLogs : CommandAction
     data object None : CommandAction
 }

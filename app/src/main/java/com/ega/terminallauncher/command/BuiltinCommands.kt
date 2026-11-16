@@ -10,6 +10,9 @@ import com.ega.terminallauncher.matcher.MatchResult
 import com.ega.terminallauncher.model.AppEntry
 import com.ega.terminallauncher.mru.MruRepository
 import com.ega.terminallauncher.state.CommandAction
+import com.ega.terminallauncher.ui.theme.InMemoryThemeRepository
+import com.ega.terminallauncher.ui.theme.ThemePreset
+import com.ega.terminallauncher.ui.theme.ThemeRepository
 import com.ega.terminallauncher.util.BatteryHelper
 import com.ega.terminallauncher.util.FlashlightHelper
 import com.ega.terminallauncher.util.VolumeHelper
@@ -32,7 +35,8 @@ class AndroidSystemOperations(context: Context) : SystemOperations {
 class BuiltinCommands(
     private val systemOps: SystemOperations,
     private val aliasManager: AliasManager,
-    private val mruRepo: MruRepository
+    private val mruRepo: MruRepository,
+    private val themeRepo: ThemeRepository = InMemoryThemeRepository()
 ) {
     fun isBuiltin(firstToken: String): Boolean {
         return AliasManager.RESERVED_WORDS.contains(firstToken.lowercase())
@@ -108,9 +112,27 @@ class BuiltinCommands(
                 }
             }
 
+            "theme" -> {
+                val trimmed = args.trim()
+                if (trimmed.isEmpty()) {
+                    val current = themeRepo.getTheme().id
+                    val available = ThemePreset.entries.joinToString(", ") { it.id }
+                    CommandAction.Message("Active theme: $current\nAvailable themes: $available")
+                } else {
+                    val preset = ThemePreset.fromId(trimmed)
+                    if (preset != null) {
+                        themeRepo.setTheme(preset)
+                        CommandAction.SetTheme(preset, "[Theme set to '${preset.id}']")
+                    } else {
+                        val available = ThemePreset.entries.joinToString(", ") { it.id }
+                        CommandAction.Message("[Error: Unknown theme '$args'. Available: $available]")
+                    }
+                }
+            }
+
             "help" -> {
                 val helpText = """
-                Ash Launcher v0.3.0 — Help
+                Ash Launcher v0.4.0 — Help
                 ==========================
                 Built-in Commands:
                   help                Show this help table
@@ -123,6 +145,7 @@ class BuiltinCommands(
                   alias [name=cmd]    View or register custom aliases
                   unalias <name>      Remove custom alias
                   reset mru           Clear MRU app launch history
+                  theme [preset]      View or switch theme preset
                   open <app>          Launch app directly (bypassing reserved words)
 
                 Shell Commands (Termux IPC):

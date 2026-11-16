@@ -132,17 +132,17 @@ class RequirementE2ETest {
     // TIER 1: FEATURE COVERAGE (Features F1 through F18, >=5 per feature)
     // =========================================================================
 
-    // --- Feature 1: Version Bump (Fase 3: versionCode 4, versionName "0.3.0") ---
+    // --- Feature 1: Version Bump (Fase 4: versionCode 5, versionName "0.4.0") ---
     @Test
     fun test_tier1_f01_versionCode_is_4() {
         val gradleContent = getGradleFile().readText()
-        assertTrue("versionCode must be 4", Regex("""versionCode\s*=\s*4""").containsMatchIn(gradleContent))
+        assertTrue("versionCode must be 5", Regex("""versionCode\s*=\s*5""").containsMatchIn(gradleContent))
     }
 
     @Test
     fun test_tier1_f01_versionName_is_0_3_0() {
         val gradleContent = getGradleFile().readText()
-        assertTrue("versionName must be \"0.3.0\"", Regex("""versionName\s*=\s*"0\.3\.0"""").containsMatchIn(gradleContent))
+        assertTrue("versionName must be \"0.4.0\"", Regex("""versionName\s*=\s*"0\.4\.0"""").containsMatchIn(gradleContent))
     }
 
     @Test
@@ -697,7 +697,7 @@ class RequirementE2ETest {
     @Test
     fun test_tier1_f15_help_contains_version() {
         val action = input("help")
-        assertTrue((action as CommandAction.Message).text.contains("v0.3.0"))
+        assertTrue((action as CommandAction.Message).text.contains("v0.4.0"))
     }
 
     @Test

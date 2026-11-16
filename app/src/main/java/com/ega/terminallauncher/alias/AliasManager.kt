@@ -18,7 +18,8 @@ class AliasManager(private val aliasRepo: AliasRepository) {
             "alias", "unalias",
             "reset",
             "help",
-            "open"
+            "open",
+            "theme"
         )
 
         private val ALIAS_NAME_REGEX = Regex("^[a-z][a-z0-9_-]*$")
