@@ -12,8 +12,8 @@ android {
         applicationId = "com.ega.terminallauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-spike"
+        versionCode = 2
+        versionName = "0.1.1-spike"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
