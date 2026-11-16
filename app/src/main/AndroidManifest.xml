@@ -4,14 +4,18 @@
     <!-- Izin eksekusi perintah background Termux -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
-    <!-- Android 11+ Package Visibility wajib untuk mengakses Termux -->
+    <!-- Android 11+ Package Visibility wajib untuk mengakses Termux dan aplikasi terinstal -->
     <queries>
         <package android:name="com.termux" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
         android:allowBackup="true"
-        android:label="Termux Spike"
+        android:label="Ash Launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
@@ -21,6 +25,8 @@
             android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
